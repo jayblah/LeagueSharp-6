@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using LeagueSharp;
 using LeagueSharp.Common;
@@ -58,12 +57,12 @@ namespace jesuisFiora
             new BlockedSpell("Pantheon", w).Add();
             new BlockedSpell("Poppy", q) { AutoAttackBuff = "PoppyDevastatingBlow" }.Add();
             new BlockedSpell("Poppy", e).Add();
-            //new BlockedSpell("Quinn", e) { ModelName = "QuinnBird"}.Add(); //
+            new BlockedSpell("Quinn", e) { ModelName = "quinnvalor" }.Add();
             new BlockedSpell("Rammus", e).Add();
             new BlockedSpell("Renekton", w) { AutoAttackName = "RenektonExecute" }.Add();
             new BlockedSpell("Renekton", w) { AutoAttackName = "RenektonSuperExecute" }.Add();
             new BlockedSpell("Rengar", q) { AutoAttackName = "RengarBasicAttack" }.Add();
-            new BlockedSpell("Riven", q) { AutoAttackBuff = "riventricleavesoundtwo" }.Add();
+            new BlockedSpell("Riven", q).Add();
             new BlockedSpell("Ryze", w).Add();
             new BlockedSpell("Shaco", q).Add();
             new BlockedSpell("Shyvana", q) { AutoAttackName = "ShyvanaDoubleAttackHit" }.Add();
@@ -75,6 +74,7 @@ namespace jesuisFiora
             new BlockedSpell("Talon", e).Add();
             new BlockedSpell("Taric", e).Add();
             new BlockedSpell("Teemo", q).Add();
+            new BlockedSpell("Tristana", e, false).Add();
             new BlockedSpell("Tristana", r).Add();
             new BlockedSpell("Trundle", q) { AutoAttackName = "TrundleQ" }.Add();
             new BlockedSpell("Trundle", r).Add();
@@ -84,14 +84,13 @@ namespace jesuisFiora
             new BlockedSpell("Vayne", e).Add();
             new BlockedSpell("Veigar", r).Add();
             new BlockedSpell("Vi", r).Add();
+            new BlockedSpell("Vladimir", r).Add();
             new BlockedSpell("Volibear", q) { AutoAttackName = "VolibearQAttack" }.Add();
             new BlockedSpell("Volibear", w).Add();
             new BlockedSpell("XinZhao", q) { AutoAttackName = "XenZhaoThrust3" }.Add();
             new BlockedSpell("XinZhao", r).Add();
-            //new BlockedSpell("Yorick", q) { AutoAttackName = "OmenOfWar" }.Add();
             new BlockedSpell("Yorick", e).Add();
-            //new BlockedSpell("Zac", r).Add();
-            new BlockedSpell("Zed", r).Add();
+            new BlockedSpell("Zac", r).Add();
         }
 
         public static void Initialize(Menu menu)
@@ -111,9 +110,9 @@ namespace jesuisFiora
                 {
                     var name = unit.ChampionName.Equals("MonkeyKing") ? "Wukong" : unit.ChampionName;
                     var slot = spell.Slot.Equals(48) ? SpellSlot.R : spell.Slot;
-                    var menuName = spell.IsAutoAttack ? unit.ChampionName + "AA" : unit.ChampionName;
+                    var menuName = spell.IsAutoAttack ? unit.ChampionName + "AA" : unit.ChampionName + slot;
                     var display = "Block " + name + " " + slot + (spell.IsAutoAttack ? " AA" : string.Empty);
-                    menu.AddBool(menuName, display);
+                    menu.AddBool(menuName, display, spell.Enabled);
                 }
             }
         }
@@ -121,7 +120,9 @@ namespace jesuisFiora
         public static bool Contains(Obj_AI_Hero unit, GameObjectProcessSpellCastEventArgs args)
         {
             var name = unit.ChampionName;
-            var slot = unit.GetSpellSlot(args);
+            var spellSlot = unit.GetSpellSlot(args.SData.Name);
+            var slot = spellSlot.Equals(48) ? SpellSlot.R : spellSlot;
+            ;
             //Console.WriteLine(slot);
 
             if (args.SData.Name.Equals("KalistaRAllyDash") && Program.Menu.Item("Oathsworn").IsActive())
@@ -135,18 +136,52 @@ namespace jesuisFiora
                     .Where(spell => !spell.HasModelCondition || unit.CharData.BaseSkinName.Equals(spell.ModelName))
                     .Where(spell => !spell.HasBuffCondition || unit.HasBuff(spell.AutoAttackBuff)))
             {
-                if (!spell.IsAutoAttack || !args.SData.IsAutoAttack())
+                if (spell.IsAutoAttack)
                 {
-                    return Program.Menu.Item(name) != null && Program.Menu.Item(name).IsActive() &&
-                           spell.Slot.Equals(slot);
+                    //Console.WriteLine(args.SData.Name);
+                    if (!args.SData.IsAutoAttack())
+                    {
+                        continue;
+                    }
+
+                    var condition = spell.AutoAttackName.Equals(args.SData.Name);
+
+                    if (unit.ChampionName.Equals("Rengar"))
+                    {
+                        condition = condition && unit.Mana.Equals(5);
+                    }
+
+                    condition = condition && Program.Menu.Item(name + "AA") != null &&
+                                Program.Menu.Item(name + "AA").IsActive();
+
+                    // Console.WriteLine("CC: " + condition);
+                    if (condition)
+                    {
+                        return true;
+                    }
+
+                    continue;
                 }
 
-                var condition = unit.ChampionName.Equals("Rengar")
-                    ? unit.Mana.Equals(5)
-                    : spell.AutoAttackName.Equals(args.SData.Name);
-                return Program.Menu.Item(name + "AA") != null && Program.Menu.Item(name + "AA").IsActive() && condition;
-            }
+                if (Program.Menu.Item(name + slot) == null || !Program.Menu.Item(name + slot).IsActive() ||
+                    !spell.Slot.Equals(slot))
+                {
+                    continue;
+                }
 
+                // is the buff not always applied? =_//
+                if (name.Equals("Riven"))
+                {
+                    var buff = unit.Buffs.FirstOrDefault(b => b.Name.Equals("RivenTriCleave"));
+                    if (buff != null && buff.Count == 3)
+                    {
+                        return true;
+                    }
+                }
+
+                // Console.WriteLine(slot + " " + args.SData.Name);
+                return true;
+            }
             return false;
         }
     }
@@ -156,15 +191,17 @@ namespace jesuisFiora
         private static readonly List<BlockedSpell> blockedSpells = new List<BlockedSpell>();
         public string AutoAttackBuff;
         public string AutoAttackName;
+        public bool Enabled;
         public bool IsSelfBuff;
         public string ModelName;
         public string Name;
         public SpellSlot Slot;
 
-        public BlockedSpell(string name, SpellSlot slot)
+        public BlockedSpell(string name, SpellSlot slot, bool enabled = true)
         {
             Name = name;
             Slot = slot;
+            Enabled = enabled;
         }
 
         public bool IsAutoAttack
